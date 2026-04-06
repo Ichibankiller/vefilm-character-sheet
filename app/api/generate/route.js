@@ -1,6 +1,16 @@
 import { GoogleGenAI } from '@google/genai'
 import Replicate from 'replicate'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS })
+}
+
 export async function POST(request) {
   try {
     const body = await request.json()
@@ -78,18 +88,21 @@ OUTPUT: Write ONLY the image generation prompt. No explanation. No preamble. No 
       },
     })
 
-    // Replicate returns a URL string or array of URLs
-    const imageUrl = Array.isArray(output) ? output[0] : output
+    // Replicate SDK v1.x returns FileOutput objects — extract URL string
+    let imageUrl
+    if (Array.isArray(output)) {
+      const first = output[0]
+      imageUrl = typeof first === 'string' ? first : (first?.url?.() ?? String(first))
+    } else {
+      imageUrl = typeof output === 'string' ? output : (output?.url?.() ?? String(output))
+    }
 
-    return Response.json({
-      imageUrl,
-      engineeredPrompt,
-    })
+    return Response.json({ imageUrl, engineeredPrompt }, { headers: CORS_HEADERS })
   } catch (err) {
     console.error('Generate error:', err)
     return Response.json(
       { error: err.message || 'Generation failed' },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     )
   }
 }
