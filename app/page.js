@@ -439,11 +439,13 @@ export default function CharacterSheetGenerator() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="loader-text">
-                {progress < 30
-                  ? 'GEMINI ENGINEERING PROMPT...'
-                  : progress < 70
-                  ? 'FLUX 1.1 PRO RENDERING...'
-                  : 'FINALIZING CHARACTER SHEET...'}
+                {progress < 15
+                  ? 'GEMINI EXTRACTING CHARACTER DETAIL...'
+                  : progress < 30
+                  ? 'LAUNCHING 7 PARALLEL RENDERS...'
+                  : progress < 80
+                  ? 'FLUX 1.1 PRO — RENDERING ALL PANELS...'
+                  : 'COMPOSITING REFERENCE SHEET...'}
               </span>
               <span style={{
                 fontFamily: "'JetBrains Mono', monospace",
@@ -505,12 +507,10 @@ export default function CharacterSheetGenerator() {
             </div>
 
             {/* Action row */}
-            <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
               <a
                 href={result.imageUrl}
-                download="character-sheet.webp"
-                target="_blank"
-                rel="noopener noreferrer"
+                download="vefilm-character-sheet.webp"
                 style={{
                   background: 'var(--accent)',
                   color: '#000',
@@ -525,7 +525,7 @@ export default function CharacterSheetGenerator() {
                   display: 'inline-block',
                 }}
               >
-                DOWNLOAD SHEET
+                DOWNLOAD FULL SHEET
               </a>
               <button
                 onClick={() => setShowPrompt(!showPrompt)}
@@ -541,9 +541,52 @@ export default function CharacterSheetGenerator() {
                   cursor: 'pointer',
                 }}
               >
-                {showPrompt ? 'HIDE PROMPT' : 'VIEW ENGINEERED PROMPT'}
+                {showPrompt ? 'HIDE PROMPT' : 'VIEW PROMPT'}
               </button>
             </div>
+
+            {/* Individual panel downloads */}
+            {result.panelUrls && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '0.58rem',
+                  letterSpacing: '0.18em',
+                  color: 'rgba(255,255,255,0.2)',
+                  textTransform: 'uppercase',
+                  marginBottom: 10,
+                }}>
+                  INDIVIDUAL PANELS
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {result.panelUrls.map(({ label, url }) => (
+                    <a
+                      key={label}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 3,
+                        padding: '6px 14px',
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '0.6rem',
+                        letterSpacing: '0.12em',
+                        color: 'rgba(255,255,255,0.4)',
+                        textDecoration: 'none',
+                        textTransform: 'uppercase',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.color = 'var(--accent)' }}
+                      onMouseLeave={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.color = 'rgba(255,255,255,0.4)' }}
+                    >
+                      {label} ↗
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Engineered prompt reveal */}
             {showPrompt && (
