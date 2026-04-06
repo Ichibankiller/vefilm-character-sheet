@@ -23,31 +23,24 @@ export async function POST(request) {
     // ─── STEP 1: GEMINI 2.5 FLASH — PROMPT ENGINEER ───────────────────────────
     const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
-    const systemPrompt = `You are a specialist in writing ultra-precise image generation prompts for character consistency sheets used in professional film production. Your outputs are used by Pedro Feria Pino, a filmmaker and AI systems director with credits on Netflix, Disney, TLC, and MTV.
+    const systemPrompt = `You are a technical prompt writer for professional film production image generation. Your ONLY job is to output raw prompt text — nothing else.
 
-Your prompt must describe a SINGLE IMAGE that functions as a multi-view character reference sheet — like a film production bible page. The image should contain:
-- Front-facing portrait (clean, centered)
-- 3/4 view
-- Profile/side view
-- Close-up of face and key features
+RULES — ABSOLUTE, NO EXCEPTIONS:
+- Output ONLY the prompt text. Zero preamble. Zero explanation. Zero markdown. No "Here is", no "**Prompt:**", no asterisks, no headers.
+- Start your output directly with a visual description word. Example: "Film production character reference sheet..."
+- If you include ANY meta-text, preamble, or markdown formatting, the output is broken and unusable.
 
-CRITICAL STYLE REQUIREMENTS (Pedro's DNA — non-negotiable):
-- Photographic hyper-realism — indistinguishable from 35mm film photography
-- Kodachrome 64 color science — warm shadows, slightly desaturated highlights, rich midtones
-- Motivated practical lighting only — no studio flat light, no artificial rim lights unless period-accurate
-- Inverse square law falloff — hard light drop-off, real shadows with directionality
-- Skin texture: visible pores, micro-shadows, realistic imperfection (no AI skin smoothing)
-- Anamorphic lens character — slight horizontal bokeh, subtle lens breathing
-- Film grain: fine, not chunky — like Kodak 5219 pushed 1 stop
-- Background: deep neutral (dark slate, aged concrete, or period-appropriate)
-- Layout: clean white reference sheet with character views arranged professionally, character name/code label at top
+YOUR TASK: Write a prompt describing a horizontal film production character reference sheet. The sheet is a single wide image containing FOUR panels arranged left to right: FRONT VIEW | THREE-QUARTER VIEW | PROFILE VIEW | CLOSE-UP DETAIL. Each panel is labeled with small text at the bottom. The sheet background is off-white/light grey like a professional production document.
 
-CHARACTER SHEET FORMAT SPECIFICS:
-- Label the sheet with "CHARACTER REFERENCE — [CHARACTER NAME OR CODE]"
-- Each view angle labeled: FRONT / 3QTR / PROFILE / DETAIL
-- Clean production design — like a prop from a real film's art department
+PHOTOGRAPHY/FILM STYLE — NON-NEGOTIABLE (Pedro Feria Pino's production DNA):
+- Photographic hyper-realism. Indistinguishable from actual 35mm film photography. NOT illustration. NOT digital art. NOT painting. NOT cartoon. REAL photography only.
+- Kodachrome 64 color science: warm shadow tones, slightly desaturated highlights, rich saturated midtones
+- Practical motivated lighting with hard directional falloff following inverse square law — real shadows, not diffused
+- Visible skin texture: pores, micro-shadows, stubble detail, realistic imperfection — absolutely zero AI skin smoothing
+- Fine film grain throughout: Kodak 5219 pushed 1 stop character
+- Anamorphic lens quality: slight horizontal bokeh ellipsis on out-of-focus elements
 
-OUTPUT: Write ONLY the image generation prompt. No explanation. No preamble. No markdown. Just the raw prompt text, starting with the visual description.`
+Write the character details using the input provided. Be specific about: exact facial features, skin tone, age markers, hair texture and color, eye color and shape, any distinguishing marks, wardrobe fabrics and wear, physical build.`
 
     let geminiContent = []
 
@@ -61,7 +54,9 @@ OUTPUT: Write ONLY the image generation prompt. No explanation. No preamble. No 
     }
 
     geminiContent.push({
-      text: `Write a multi-view character sheet image generation prompt for this character: ${characterDescription || 'Use the uploaded reference image to extract all visual details — face, build, wardrobe, hair, skin tone, age, distinguishing features.'}`,
+      text: imageBase64
+        ? `Extract every precise visual detail from this reference image and write the character sheet prompt. Output only the raw prompt text — no preamble, no markdown, start directly with the visual description.`
+        : `Write the character sheet prompt for this character: ${characterDescription}. Output only the raw prompt text — no preamble, no markdown, start directly with the visual description.`,
     })
 
     const geminiResponse = await genai.models.generateContent({
@@ -70,21 +65,32 @@ OUTPUT: Write ONLY the image generation prompt. No explanation. No preamble. No 
       systemInstruction: systemPrompt,
     })
 
-    const engineeredPrompt = geminiResponse.candidates[0].content.parts[0].text.trim()
+    // Strip any markdown/preamble Gemini might still sneak in
+    let engineeredPrompt = geminiResponse.candidates[0].content.parts[0].text.trim()
+    engineeredPrompt = engineeredPrompt
+      .replace(/^\*\*Prompt:\*\*\s*/i, '')
+      .replace(/^Here'?s?\s+[^:]+:\s*/i, '')
+      .replace(/^Prompt:\s*/i, '')
+      .replace(/\*\*/g, '')
+      .trim()
 
-    console.log('Gemini engineered prompt:', engineeredPrompt.slice(0, 200) + '...')
+    // Hard-anchor photorealism — prepend locked style prefix so FLUX can't drift toward illustration
+    const STYLE_ANCHOR = 'Professional film production character reference sheet, four-panel layout arranged horizontally (FRONT VIEW, THREE-QUARTER VIEW, PROFILE VIEW, CLOSE-UP DETAIL), photorealistic 35mm film photography, NOT illustration, NOT cartoon, NOT digital painting, real human photograph, '
+    const finalPrompt = STYLE_ANCHOR + engineeredPrompt
+
+    console.log('Final prompt (first 300):', finalPrompt.slice(0, 300))
 
     // ─── STEP 2: REPLICATE — FLUX 1.1 PRO ─────────────────────────────────────
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
 
     const output = await replicate.run('black-forest-labs/flux-1.1-pro', {
       input: {
-        prompt: engineeredPrompt,
-        aspect_ratio: '3:4',
+        prompt: finalPrompt,
+        aspect_ratio: '4:3',
         output_format: 'webp',
         output_quality: 95,
         safety_tolerance: 2,
-        prompt_upsampling: false,
+        prompt_upsampling: true,
       },
     })
 
@@ -97,7 +103,7 @@ OUTPUT: Write ONLY the image generation prompt. No explanation. No preamble. No 
       imageUrl = typeof output === 'string' ? output : (output?.url?.() ?? String(output))
     }
 
-    return Response.json({ imageUrl, engineeredPrompt }, { headers: CORS_HEADERS })
+    return Response.json({ imageUrl, engineeredPrompt: finalPrompt }, { headers: CORS_HEADERS })
   } catch (err) {
     console.error('Generate error:', err)
     return Response.json(
