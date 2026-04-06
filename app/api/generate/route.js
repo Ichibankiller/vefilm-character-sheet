@@ -23,24 +23,29 @@ export async function POST(request) {
     // ─── STEP 1: GEMINI 2.5 FLASH — PROMPT ENGINEER ───────────────────────────
     const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
-    const systemPrompt = `You are a technical prompt writer for professional film production image generation. Your ONLY job is to output raw prompt text — nothing else.
+    const systemPrompt = `You are a technical prompt writer for professional film production. Your ONLY job is to output raw prompt text — nothing else.
 
-RULES — ABSOLUTE, NO EXCEPTIONS:
-- Output ONLY the prompt text. Zero preamble. Zero explanation. Zero markdown. No "Here is", no "**Prompt:**", no asterisks, no headers.
-- Start your output directly with a visual description word. Example: "Film production character reference sheet..."
-- If you include ANY meta-text, preamble, or markdown formatting, the output is broken and unusable.
+ABSOLUTE OUTPUT RULES — NO EXCEPTIONS:
+- Output ONLY the prompt text. Zero preamble. Zero explanation. Zero markdown formatting.
+- No "Here is", no "**Prompt:**", no asterisks, no bullet points, no headers, no line breaks between sentences.
+- Begin your output immediately with the character description. First word must be a descriptive word about the character.
+- One continuous paragraph only.
 
-YOUR TASK: Write a prompt describing a horizontal film production character reference sheet. The sheet is a single wide image containing FOUR panels arranged left to right: FRONT VIEW | THREE-QUARTER VIEW | PROFILE VIEW | CLOSE-UP DETAIL. Each panel is labeled with small text at the bottom. The sheet background is off-white/light grey like a professional production document.
+YOUR TASK: Describe the physical character in precise detail for a production reference sheet. Focus entirely on the PERSON — their exact physical appearance, face, build, skin, hair, eyes, wardrobe details, fabric textures, shoes, accessories, distinguishing marks. Write as if briefing a casting director, costume designer, and makeup artist simultaneously.
 
-PHOTOGRAPHY/FILM STYLE — NON-NEGOTIABLE (Pedro Feria Pino's production DNA):
-- Photographic hyper-realism. Indistinguishable from actual 35mm film photography. NOT illustration. NOT digital art. NOT painting. NOT cartoon. REAL photography only.
-- Kodachrome 64 color science: warm shadow tones, slightly desaturated highlights, rich saturated midtones
-- Practical motivated lighting with hard directional falloff following inverse square law — real shadows, not diffused
-- Visible skin texture: pores, micro-shadows, stubble detail, realistic imperfection — absolutely zero AI skin smoothing
-- Fine film grain throughout: Kodak 5219 pushed 1 stop character
-- Anamorphic lens quality: slight horizontal bokeh ellipsis on out-of-focus elements
+CRITICAL — WHAT TO DESCRIBE:
+- Age (specific range, e.g. "late 30s"), ethnicity, skin tone (specific, e.g. "pale with warm undertones", "medium brown", "deep brown")
+- Face shape, jaw, cheekbones, forehead, nose shape, lip shape
+- Eye color and shape (e.g. "deep-set hazel eyes, heavy upper lids")
+- Hair: exact color, texture, length, styling (e.g. "short dark brown hair, fine texture, pushed forward, slight cowlick at crown")
+- Any facial hair: exact coverage, color, density
+- Distinguishing features: scars, moles, freckles, glasses (frame style, color), piercings
+- Build: height impression, weight, posture, muscle tone
+- Wardrobe: every garment with fabric, color, fit, wear/age of clothing
+- Footwear: style, color, condition
+- Overall emotional baseline: how this person carries themselves
 
-Write the character details using the input provided. Be specific about: exact facial features, skin tone, age markers, hair texture and color, eye color and shape, any distinguishing marks, wardrobe fabrics and wear, physical build.`
+DO NOT mention the sheet format, panels, background, or lighting. That is handled separately. Just describe the character.`
 
     let geminiContent = []
 
@@ -55,8 +60,8 @@ Write the character details using the input provided. Be specific about: exact f
 
     geminiContent.push({
       text: imageBase64
-        ? `Extract every precise visual detail from this reference image and write the character sheet prompt. Output only the raw prompt text — no preamble, no markdown, start directly with the visual description.`
-        : `Write the character sheet prompt for this character: ${characterDescription}. Output only the raw prompt text — no preamble, no markdown, start directly with the visual description.`,
+        ? `Analyze this reference image and extract every precise physical detail about this person. Output only the character description — no preamble, no markdown, start immediately with descriptive text about the person.`
+        : `Write a precise physical description of this character: ${characterDescription}. Output only the character description — no preamble, no markdown, start immediately with descriptive text about the person.`,
     })
 
     const geminiResponse = await genai.models.generateContent({
@@ -65,18 +70,20 @@ Write the character details using the input provided. Be specific about: exact f
       systemInstruction: systemPrompt,
     })
 
-    // Strip any markdown/preamble Gemini might still sneak in
-    let engineeredPrompt = geminiResponse.candidates[0].content.parts[0].text.trim()
-    engineeredPrompt = engineeredPrompt
-      .replace(/^\*\*Prompt:\*\*\s*/i, '')
+    // Strip any markdown/preamble Gemini might still output
+    let characterDetail = geminiResponse.candidates[0].content.parts[0].text.trim()
+    characterDetail = characterDetail
+      .replace(/^\*\*[^*]+\*\*\s*/i, '')
       .replace(/^Here'?s?\s+[^:]+:\s*/i, '')
       .replace(/^Prompt:\s*/i, '')
       .replace(/\*\*/g, '')
+      .replace(/\n+/g, ' ')
       .trim()
 
-    // Hard-anchor photorealism — prepend locked style prefix so FLUX can't drift toward illustration
-    const STYLE_ANCHOR = 'Professional film production character reference sheet, four-panel layout arranged horizontally (FRONT VIEW, THREE-QUARTER VIEW, PROFILE VIEW, CLOSE-UP DETAIL), photorealistic 35mm film photography, NOT illustration, NOT cartoon, NOT digital painting, real human photograph, '
-    const finalPrompt = STYLE_ANCHOR + engineeredPrompt
+    // Build the final prompt — locked sheet format prefix + Gemini's character detail
+    // Sheet format: clean white studio reference photography (so all details read clearly)
+    // Character appearance: photorealistic, film-quality skin and texture
+    const finalPrompt = `Professional film production character reference sheet. Six photorealistic photographs of the exact same person arranged in a grid: top row shows three-quarter body shots — FRONT facing camera, THREE-QUARTER angle facing right, SIDE PROFILE facing right, BACK view; bottom row shows three close-up face portraits — FACE FRONT, FACE THREE-QUARTER, FACE PROFILE. Clean white seamless studio background. Soft even diffused studio lighting with no harsh shadows — every wardrobe and facial detail fully visible. Photorealistic, indistinguishable from actual studio photography. NOT illustration, NOT cartoon, NOT painting, NOT digital art. Real photograph quality. The person in every panel is identical — same face, same clothes, same hair, same build. Character: ${characterDetail}`
 
     console.log('Final prompt (first 300):', finalPrompt.slice(0, 300))
 
@@ -86,7 +93,7 @@ Write the character details using the input provided. Be specific about: exact f
     const output = await replicate.run('black-forest-labs/flux-1.1-pro', {
       input: {
         prompt: finalPrompt,
-        aspect_ratio: '4:3',
+        aspect_ratio: '16:9',
         output_format: 'webp',
         output_quality: 95,
         safety_tolerance: 2,
