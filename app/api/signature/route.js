@@ -17,7 +17,7 @@ export async function OPTIONS() {
 const PROJECT_DNA = {
   cinematic: {
     name: 'PEDRO FERIA PINO — SIGNATURE',
-    dna: `Shot on 15-perf 70mm IMAX with Cineovision anamorphic glass — 40mm or 75mm Cineovision 2x squeeze, producing characteristic oval bokeh on specular highlights, subtle warm lens breathing, and faint horizontal anamorphic flare traces across practical light sources. Kodachrome 64 color science: warm amber-gold in shadow rolloff with rich saturation in midtones, slightly desaturated highlights preventing blowout. Motivated practical light sources only — windows, tungsten practicals, streetlights, fire — never studio setups, never softboxes. Inverse square law falloff strictly observed: hard directional shadows, zero ambient fill unless period-accurate. 70mm grain character: extremely fine, almost imperceptible at normal viewing, resolving skin at pore level — visible capillaries, micro-shadows in stubble, asymmetry of real faces. Depth stacking: foreground element within 2 feet of lens, mid subject, background compressed by Cineovision glass. Kodak Vision3 500T 5219 pushed 1 stop. 2.39:1 aspect ratio. Indistinguishable from a real IMAX photochemical print.`,
+    dna: `Shot on 15-perf 70mm IMAX with Cineovision anamorphic glass — 40mm or 75mm Cineovision 2x squeeze, producing characteristic oval bokeh on specular highlights, subtle warm lens breathing, faint horizontal anamorphic flare traces across practical light sources. ENR silver retention processing — skip-bleach — crushed blacks with zero shadow lift, warm highlight rolloff bleeding toward overexposure, heavy photochemical contrast with desaturated color midtones. Mixed color temperature: cool cyan ambient daylight at 5600K colliding with harsh amber tungsten practicals at 2800K — the collision is the composition. Motivated practical light sources only — windows, tungsten practicals, streetlights, fire — never studio setups, never softboxes. Inverse square law falloff strictly observed: hard directional shadows, zero ambient fill. Kodak Vision3 500T 5219 pushed 1 stop. 70mm grain: extremely fine, resolving skin at pore level — visible capillaries, micro-shadows in stubble, facial asymmetry, imperfection as authentication signal. Zero AI skin smoothing. Depth stacking: foreground element within 2 feet of lens, mid-subject focus, background compressed by Cineovision glass. Indistinguishable from a real IMAX photochemical print frame.`,
   },
   greyhouse: {
     name: 'THE GREY HOUSE — SCOTLAND 1967',
@@ -61,16 +61,20 @@ ALWAYS SPECIFY IN OUTPUT:
 - Color temperature of every light source in Kelvin
 - Shadow contrast ratio (e.g. "8:1 contrast ratio, zero fill")
 - Film stock name and push/pull (e.g. "Kodak Vision3 500T 5219, pushed 1 stop")
+- Processing (e.g. "ENR silver retention", "skip-bleach", "standard photochemical")
 - Grain character specific to that stock and push
 - Any era-specific or format-specific optical artifacts (anamorphic flare, lens breathing, chromatic fringing)
-- "photorealistic cinematic film still, no watermarks, no text, no AI smoothing"
+- "photorealistic film still, no watermarks, no text, no AI smoothing"
+
+BANNED WORDS — never use these: cinematic, masterpiece, glowing, hyper-realistic, beautiful, stunning, breathtaking, 8k, ultra-detailed, award-winning, epic, dramatic lighting. These are meaningless AI tokens that degrade output quality.
 
 Take the user's scene description and realize it fully within this visual DNA. Expand sparse descriptions into cinematically specific, production-ready prompts.`
 
     const geminiResponse = await genai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: `Write a cinematic image generation prompt for this scene: ${description}\n\nOutput only raw prompt text — no preamble, start immediately with visual description.` }] }],
+      contents: [{ role: 'user', parts: [{ text: `Write a technical image generation prompt for this scene: ${description}\n\nOutput only raw prompt text — no preamble, start immediately with visual description.` }] }],
       systemInstruction: systemPrompt,
+      generationConfig: { temperature: 0.1 },
     })
 
     let engineeredPrompt = geminiResponse.candidates[0].content.parts[0].text.trim()
@@ -87,9 +91,9 @@ Take the user's scene description and realize it fully within this visual DNA. E
     const output = await replicate.run('black-forest-labs/flux-1.1-pro', {
       input: {
         prompt: engineeredPrompt,
-        aspect_ratio: '16:9',
+        aspect_ratio: '3:2',
         output_format: 'webp',
-        output_quality: 95,
+        output_quality: 100,
         safety_tolerance: 2,
         prompt_upsampling: true,
       },
