@@ -58,18 +58,17 @@ OUTPUT RULES — ABSOLUTE:
 PEDRO'S VISUAL DNA FOR THIS PROJECT (apply every element, non-negotiable):
 ${project.dna}
 
-ALWAYS SPECIFY IN OUTPUT:
-- Exact film format (70mm IMAX, 35mm, Super 35, etc.) and aspect ratio
-- Exact lens name and focal length (e.g. "Cineovision 75mm 2x anamorphic", "Zeiss Ultra Prime 32mm T1.9")
-- Color temperature of every light source in Kelvin
-- Shadow contrast ratio (e.g. "8:1 contrast ratio, zero fill")
-- Film stock name and push/pull (e.g. "Kodak Vision3 500T 5219, pushed 1 stop")
-- Processing (e.g. "ENR silver retention", "skip-bleach", "standard photochemical")
-- Grain character specific to that stock and push
-- Any era-specific or format-specific optical artifacts (anamorphic flare, lens breathing, chromatic fringing)
-- "photorealistic film still, no watermarks, no text, no AI smoothing"
+TRANSLATE TECHNICAL SPECS INTO VISUAL LANGUAGE FLUX UNDERSTANDS:
+- ENR/skip-bleach → write: "crushed blacks with no shadow detail, bleached desaturated midtones, highlights blooming toward white, heavy photochemical contrast"
+- Cineovision anamorphic → write: "oval bokeh on out-of-focus highlights, faint horizontal lens flare streak across bright sources, slight barrel distortion at frame edges"
+- 70mm grain → write: "fine visible film grain throughout, skin resolves at pore level, visible capillaries and micro-texture, no digital smoothing"
+- Pushed film stock → write: "exposure pushed, grain elevated, shadow detail compressed, color saturation reduced in shadows"
+- Mixed color temp → write: "cool blue-grey ambient light at 5600K, harsh amber tungsten at 2800K, the two sources visibly collide on the subject's face and hands"
+- Hard practical lighting → write: "single hard light source casting sharp shadow edge, no fill on shadow side, zero ambient bounce"
 
-BANNED WORDS — never use these: cinematic, masterpiece, glowing, hyper-realistic, beautiful, stunning, breathtaking, 8k, ultra-detailed, award-winning, epic, dramatic lighting. These are meaningless AI tokens that degrade output quality.
+ALWAYS END WITH: "photorealistic film still, visible grain, no watermarks, no text, no digital skin smoothing, no AI rendering artifacts"
+
+BANNED WORDS — never use these: cinematic, masterpiece, glowing, hyper-realistic, beautiful, stunning, breathtaking, 8k, ultra-detailed, award-winning, painterly, soft glow, dramatic lighting, ethereal, magical, otherworldly. These produce generic AI output.
 
 Take the user's scene description and realize it fully within this visual DNA. Expand sparse descriptions into cinematically specific, production-ready prompts.`
 
