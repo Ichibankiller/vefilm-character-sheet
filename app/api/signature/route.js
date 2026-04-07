@@ -68,9 +68,14 @@ TRANSLATE TECHNICAL SPECS INTO VISUAL LANGUAGE FLUX UNDERSTANDS:
 - INDOOR scenes (always apply): "visible light shafts cutting through interior haze, airborne dust particles suspended in directional light beams, smoke or moisture in the air, light has physical density and volumetric scatter, god rays where a window or opening allows"
 - OUTDOOR scenes (apply when atmospherically appropriate — night, dawn, dusk, rain, cold, forest, industrial, overcast): "ground-level fog or mist rolling through the scene, atmospheric haze layering the background, suspended moisture in the air catching available light, depth compressed by weather haze" — do NOT apply to clear midday outdoor scenes
 
-ALWAYS END WITH: "photorealistic film still, visible grain, no watermarks, no text, no digital skin smoothing, no AI rendering artifacts"
+SKIN AND SURFACE REALISM — always write these when a person is present:
+"real human skin — pores visible at normal viewing distance, uneven skin tone, fine facial hair, natural capillaries beneath surface, slight redness at nose and cheeks, natural oil sheen, lip texture, under-eye shadow, asymmetry of a real face — not symmetrical, not smoothed, not idealized"
+Every surface must have physical texture: fabric shows thread count and wear, wood shows grain and imperfection, walls show paint layers and staining, metal shows oxidation and scratches.
 
-BANNED WORDS — never use these: cinematic, masterpiece, glowing, hyper-realistic, beautiful, stunning, breathtaking, 8k, ultra-detailed, award-winning, painterly, soft glow, dramatic lighting, ethereal, magical, otherworldly. These produce generic AI output.
+ANTI-CARTOON ENFORCEMENT — always end the prompt with this exact phrase:
+"photograph, not illustration, not CGI, not 3D render, not digital art, not animation, not concept art, real camera lens, real film grain, real skin texture, shot on film"
+
+BANNED WORDS — never use these: cinematic, masterpiece, glowing, hyper-realistic, beautiful, stunning, breathtaking, 8k, ultra-detailed, award-winning, painterly, soft glow, dramatic lighting, ethereal, magical, otherworldly, rendered, illustrated, stylized. These produce cartoony AI output.
 
 Take the user's scene description and realize it fully within this visual DNA. Expand sparse descriptions into cinematically specific, production-ready prompts.`
 
