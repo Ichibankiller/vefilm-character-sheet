@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'VEFILM Character Sheet Generator',
-  description: 'AI-powered character consistency sheet generator by Pedro Feria Pino',
+  title: "VEFILM Director's Lens Pro",
+  description: "AI cinematography system by Pedro Feria Pino — describe a shot, get three takes",
 }
 
 export default function RootLayout({ children }) {

@@ -1,9 +1,8 @@
 import { GoogleGenAI } from '@google/genai'
 import Replicate from 'replicate'
-import sharp from 'sharp'
 
-// Allow up to 300s — parallel FLUX generations take 45-90s
-export const maxDuration = 300
+// Only need time for Gemini + 3 non-blocking prediction creates
+export const maxDuration = 60
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -15,204 +14,127 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
 
-// 4 panels only — avoids Replicate rate limits while still covering key angles
-const PANELS = [
-  {
-    label: 'FRONT',
-    viewInstruction: 'Full body, facing directly toward camera, standing neutral, arms at sides, feet shoulder-width apart.',
-    aspect_ratio: '2:3',
-    col: 0,
-  },
-  {
-    label: '3/4 VIEW',
-    viewInstruction: 'Full body, three-quarter angle, body rotated 45 degrees to the right, face turned slightly toward camera.',
-    aspect_ratio: '2:3',
-    col: 1,
-  },
-  {
-    label: 'PROFILE',
-    viewInstruction: 'Full body, strict side profile, facing right, head and body in true 90-degree profile.',
-    aspect_ratio: '2:3',
-    col: 2,
-  },
-  {
-    label: 'FACE DETAIL',
-    viewInstruction: 'Head and shoulders close-up portrait, face directly forward, neutral expression, sharp focus on facial features.',
-    aspect_ratio: '1:1',
-    col: 3,
-  },
-]
-
-async function runFlux(replicate, basePrompt, panel, seed, attempt = 0) {
-  const panelPrompt = `${basePrompt} ${panel.viewInstruction} Single photograph, no collage, no multiple people, one person only.`
-
-  try {
-    const output = await replicate.run('black-forest-labs/flux-1.1-pro', {
-      input: {
-        prompt: panelPrompt,
-        aspect_ratio: panel.aspect_ratio,
-        output_format: 'webp',
-        output_quality: 90,
-        safety_tolerance: 2,
-        prompt_upsampling: true,
-        seed,
-      },
-    })
-
-    const raw = Array.isArray(output) ? output[0] : output
-    return typeof raw === 'string' ? raw : (raw?.url?.() ?? String(raw))
-  } catch (err) {
-    // Retry up to 2 times on 429 rate limit with exponential backoff
-    if (attempt < 2 && (err.message?.includes('429') || err.message?.includes('throttled'))) {
-      const delay = (attempt + 1) * 8000
-      console.log(`Panel ${panel.label} rate limited — retrying in ${delay}ms (attempt ${attempt + 1})`)
-      await new Promise(r => setTimeout(r, delay))
-      return runFlux(replicate, basePrompt, panel, seed, attempt + 1)
-    }
-    throw err
-  }
-}
-
-async function fetchImageBuffer(url) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Failed to fetch image: ${url}`)
-  return Buffer.from(await res.arrayBuffer())
-}
+const PEDRO_DNA = `Kodachrome 64 color science: warm amber-gold shadows with rich saturation, slightly desaturated highlights preventing blowout, deep saturated midtones. Motivated practical light sources only — no studio setups, no softboxes, only real-world sources (windows, practicals, streetlights, fire). Inverse square law falloff strictly observed — hard edge shadows, directional light with no ambient fill unless period-accurate. Anamorphic 2.39:1 squeeze with characteristic horizontal bokeh ellipsis on specular highlights. Kodak 5219 Vision3 pushed 1 stop for fine grain presence. Skin texture at full resolution — visible pores, micro-shadows under stubble, asymmetry, capillaries, imperfection as authenticity. Zero AI skin smoothing. Depth stacking: foreground element within 2 feet of lens, mid subject, compressed background. Photographic realism at 35mm — indistinguishable from real photography.`
 
 export async function POST(request) {
   try {
     const body = await request.json()
-    const { characterDescription, imageBase64, imageMimeType } = body
+    const { description, lockedSeed } = body
 
-    if (!characterDescription && !imageBase64) {
-      return Response.json({ error: 'Character description or image is required' }, { status: 400 })
+    if (!description) {
+      return Response.json(
+        { error: 'Scene description required' },
+        { status: 400, headers: CORS_HEADERS }
+      )
     }
 
-    // ─── STEP 1: GEMINI — EXTRACT CHARACTER DETAIL ────────────────────────────
+    // ── STEP 1: GEMINI — BUILD CINEMATOGRAPHY PLAN + FLUX PROMPT ──────────────
     const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
-    const systemPrompt = `You are a technical prompt writer for professional film production. Output ONLY raw descriptive text — nothing else.
+    const systemPrompt = `You are Pedro Feria Pino's personal cinematographer AI. Pedro is a filmmaker and AI systems director with credits on Netflix, Disney, TLC, and MTV. You read a scene description and do two things: build a precise cinematography plan, then write the FLUX image generation prompt that realizes it.
 
-ABSOLUTE RULES:
-- Output ONLY the character description. No preamble. No markdown. No "Here is". No asterisks. No headers.
-- One continuous paragraph. Start immediately with a descriptive word about the person.
+PEDRO'S VISUAL DNA (apply every element — non-negotiable):
+${PEDRO_DNA}
 
-Describe this character with extreme precision for a casting/costume/makeup brief:
-- Age (specific range), ethnicity, skin tone (specific)
-- Face shape, jaw, cheekbones, nose shape, lip shape, forehead
-- Eye color and shape exactly
-- Hair: exact color, texture, length, styling
-- Facial hair: exact coverage, density, color
-- Distinguishing features: scars, moles, freckles, glasses (frame style+color), piercings, tattoos
-- Build: height impression, weight, posture, muscle tone
-- Every garment: fabric, color, fit, condition, wear
-- Footwear: exact style, color, condition
-- Overall bearing: how this person stands and carries themselves`
+OUTPUT: Return valid JSON only. No markdown fences. No explanation. No preamble. Start your response with { and end with }.
 
-    let geminiContent = []
-    if (imageBase64) {
-      geminiContent.push({ inlineData: { data: imageBase64, mimeType: imageMimeType || 'image/jpeg' } })
-    }
-    geminiContent.push({
-      text: imageBase64
-        ? 'Extract every precise physical detail from this reference image. Output only the character description — no preamble, start immediately with descriptive text.'
-        : `Write a precise physical description of: ${characterDescription}. Output only the character description — no preamble, start immediately with descriptive text.`,
-    })
+JSON STRUCTURE (exact keys required):
+{
+  "cinematographyPlan": {
+    "focalLength": "specific focal length and lens character (e.g. 35mm Cooke S4/i, shallow focus, creamy out-of-focus rendering)",
+    "filmStock": "exact film stock and push/pull (e.g. Kodak Vision3 500T 5219, pushed 1 stop)",
+    "colorTemp": "Kelvin value of each light source present (e.g. 2800K tungsten practical at frame left, 5600K through window right)",
+    "contrastRatio": "lighting contrast ratio (e.g. 8:1)",
+    "grain": "grain character and density (e.g. fine visible grain, pushed — adds texture without obscuring detail)",
+    "mood": "one evocative phrase — the single emotional key to the image",
+    "lightingPlan": "2-3 sentences describing the exact light sources, their direction, falloff, and what they do to the subject and environment",
+    "composition": "1-2 sentences on framing, depth layers, negative space, where the eye lands"
+  },
+  "fluxPrompt": "One long continuous paragraph — the complete FLUX image generation prompt realizing this scene through Pedro's visual DNA. Include: exact film stock, focal length, Kelvin values of each source, contrast ratio, grain character, era-specific details if relevant, depth layering, skin texture instruction. End with: photorealistic cinematic film still, no watermarks, no text."
+}`
 
     const geminiResponse = await genai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: geminiContent }],
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: `Scene: ${description}\n\nOutput only the JSON object — start with { and end with }.` }],
+        },
+      ],
       systemInstruction: systemPrompt,
     })
 
-    let characterDetail = geminiResponse.candidates[0].content.parts[0].text.trim()
-    // Strip any preamble Gemini sneaks in
-    characterDetail = characterDetail
-      .replace(/^\*\*[^*]+\*\*\s*/i, '')
-      .replace(/^Here'?s?\s+[^:]+:\s*/i, '')
-      .replace(/^Prompt:\s*/i, '')
-      .replace(/\*\*/g, '')
-      .replace(/\n+/g, ' ')
+    let rawText = geminiResponse.candidates[0].content.parts[0].text.trim()
+
+    // Strip any code fences Gemini might add despite instructions
+    rawText = rawText
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
       .trim()
 
-    // Base prompt — photorealism + character detail, NO layout (layout is per-panel)
-    const basePrompt = `Photorealistic studio reference photograph, clean white seamless background, soft diffused even studio lighting, no shadows, every detail clearly visible, indistinguishable from professional studio photography, NOT illustration NOT cartoon NOT painting NOT digital art. Person: ${characterDetail}`
+    // Find the outermost JSON object
+    const jsonStart = rawText.indexOf('{')
+    const jsonEnd = rawText.lastIndexOf('}')
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      rawText = rawText.slice(jsonStart, jsonEnd + 1)
+    }
 
-    console.log('Base prompt (first 200):', basePrompt.slice(0, 200))
+    let parsed
+    try {
+      parsed = JSON.parse(rawText)
+    } catch (parseErr) {
+      console.error('Gemini JSON parse failed:', parseErr.message)
+      console.error('Raw Gemini output:', rawText.slice(0, 500))
+      throw new Error('Gemini returned malformed JSON — try again')
+    }
 
-    // ─── STEP 2: GENERATE 4 PANELS IN PARALLEL ────────────────────────────────
+    const { cinematographyPlan, fluxPrompt } = parsed
+
+    if (!cinematographyPlan || !fluxPrompt) {
+      throw new Error('Gemini response missing required fields')
+    }
+
+    // ── STEP 2: GENERATE 3 SEEDS ───────────────────────────────────────────────
+    // If lockedSeed provided: Take 1 = exact locked frame, Takes 2+3 = nearby explorations
+    // If no lock: 3 independent random seeds
+    const seeds = lockedSeed != null
+      ? [lockedSeed, lockedSeed + 7, lockedSeed + 13]
+      : Array.from({ length: 3 }, () => Math.floor(Math.random() * 2147483647))
+
+    // ── STEP 3: CREATE 3 ASYNC PREDICTIONS — RETURNS IMMEDIATELY ──────────────
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN })
-    const seed = Math.floor(Math.random() * 2147483647)
 
-    console.log('Generating 4 panels with seed', seed)
-
-    // Stagger start times slightly to avoid burst rate limiting
-    const imageUrls = await Promise.all(
-      PANELS.map((panel, i) =>
-        new Promise(resolve => setTimeout(resolve, i * 300))
-          .then(() => runFlux(replicate, basePrompt, panel, seed))
+    const predictions = await Promise.all(
+      seeds.map(seed =>
+        replicate.predictions.create({
+          model: 'black-forest-labs/flux-1.1-pro',
+          input: {
+            prompt: fluxPrompt,
+            aspect_ratio: '16:9',
+            output_format: 'webp',
+            output_quality: 95,
+            safety_tolerance: 2,
+            prompt_upsampling: true,
+            seed,
+          },
+        })
       )
     )
 
-    console.log('All panels generated, compositing...')
-
-    // ─── STEP 3: COMPOSITE — 4 PANELS SIDE BY SIDE ────────────────────────────
-    // First 3: full-body (2:3) → 380×570 each
-    // Last 1: face detail (1:1) → 380×380, vertically centered
-    const BODY_W = 380
-    const BODY_H = 570
-    const FACE_W = 380
-    const FACE_H = 380
-    const GAP = 6
-    const PAD = 20
-
-    const totalW = PAD * 2 + 4 * BODY_W + 3 * GAP
-    const totalH = PAD * 2 + BODY_H
-
-    // Fetch all 4 images
-    const buffers = await Promise.all(imageUrls.map(url => fetchImageBuffer(url)))
-
-    // Resize
-    const resizedPanels = await Promise.all([
-      sharp(buffers[0]).resize(BODY_W, BODY_H, { fit: 'cover', position: 'top' }).webp({ quality: 90 }).toBuffer(),
-      sharp(buffers[1]).resize(BODY_W, BODY_H, { fit: 'cover', position: 'top' }).webp({ quality: 90 }).toBuffer(),
-      sharp(buffers[2]).resize(BODY_W, BODY_H, { fit: 'cover', position: 'top' }).webp({ quality: 90 }).toBuffer(),
-      sharp(buffers[3]).resize(FACE_W, FACE_H, { fit: 'cover', position: 'center' }).webp({ quality: 90 }).toBuffer(),
-    ])
-
-    const compositeOps = [
-      { input: resizedPanels[0], top: PAD, left: PAD },
-      { input: resizedPanels[1], top: PAD, left: PAD + BODY_W + GAP },
-      { input: resizedPanels[2], top: PAD, left: PAD + (BODY_W + GAP) * 2 },
-      // Face panel centered vertically in the body-height column
-      { input: resizedPanels[3], top: PAD + Math.floor((BODY_H - FACE_H) / 2), left: PAD + (BODY_W + GAP) * 3 },
-    ]
-
-    const sheet = await sharp({
-      create: {
-        width: totalW,
-        height: totalH,
-        channels: 3,
-        background: { r: 238, g: 238, b: 238 },
-      },
-    })
-      .composite(compositeOps)
-      .webp({ quality: 92 })
-      .toBuffer()
-
-    const base64Sheet = sheet.toString('base64')
-    const imageUrl = `data:image/webp;base64,${base64Sheet}`
+    console.log('3 predictions created:', predictions.map(p => p.id))
 
     return Response.json(
       {
-        imageUrl,
-        engineeredPrompt: basePrompt,
-        panelUrls: imageUrls.map((url, i) => ({ label: PANELS[i].label, url })),
+        success: true,
+        predictionIds: predictions.map(p => p.id),
+        cinematographyPlan,
+        fluxPrompt,
+        seeds,
       },
       { headers: CORS_HEADERS }
     )
   } catch (err) {
-    console.error('Generate error:', err)
+    console.error('Director generate error:', err)
     return Response.json(
       { error: err.message || 'Generation failed' },
       { status: 500, headers: CORS_HEADERS }
