@@ -50,7 +50,10 @@ export async function POST(request) {
 
 OUTPUT RULES — ABSOLUTE:
 - Output ONLY the image generation prompt. No preamble. No explanation. No markdown. Start immediately with a visual word.
-- One continuous paragraph.
+- One continuous paragraph. Maximum 120 words total.
+- SUBJECT FIRST: If there is a person or character in the scene, describe them in the first 2 sentences. Physical appearance, clothing, pose, expression. The subject must be undeniable before the environment is mentioned.
+- FIGURE ANCHORING: When a person is present, include exactly one of these phrases: "single figure dominant in frame", "subject fills foreground", or "full body visible, figure centered". This prevents FLUX from dropping the character.
+- Environment and atmosphere come after the subject is locked. Keep environment to 1-2 sentences max.
 
 PEDRO'S VISUAL DNA FOR THIS PROJECT (apply every element, non-negotiable):
 ${project.dna}
